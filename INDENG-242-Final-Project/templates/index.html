@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA Game Outcome Predictor</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css">
+    <style>
+        .hidden {
+            display: none;
+        }
+        .team-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .players-list {
+            width: 100%;
+            height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 20px;
+        }
+        .center-btn {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .result-display {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">NBA Game Outcome Predictor</h1>
+        <hr>
+        <div id="team-selection">
+            <form id="team-selection-form">
+                <div class="mb-4">
+                    <label for="team1" class="form-label">Select Team 1:</label>
+                    <select id="team1" name="team1" class="form-select" required>
+                        <option value="" disabled selected>Select a team</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="team2" class="form-label">Select Team 2:</label>
+                    <select id="team2" name="team2" class="form-select" required>
+                        <option value="" disabled selected>Select a team</option>
+                    </select>
+                </div>
+                <div class="text-center">
+                    <button type="submit" class="btn btn-primary">Continue to Player Selection</button>
+                </div>
+            </form>
+        </div>
+        <div id="player-selection" class="hidden">
+            <div class="team-section">
+                <div>
+                    <h5 id="team1-header" class="text-center">Select Players for Team 1</h5>
+                    <div id="team1-players" class="players-list"></div>
+                </div>
+                <div class="center-btn">
+                    <button id="predict-outcome" class="btn btn-success">Predict Outcome</button>
+                    <br><br>
+                    <button id="back-button" class="btn btn-secondary">Back to Team Selection</button>
+                    <div id="prediction-result" class="result-display text-center mt-4" style="display: none;">
+                        <h4 id="prediction-text"></h4>
+                    </div>
+                </div>
+                <div>
+                    <h5 id="team2-header" class="text-center">Select Players for Team 2</h5>
+                    <div id="team2-players" class="players-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const teams = [
+            "ATL", "BKN", "BOS", "CHA", "CHI", "CLE", "DAL", "DEN", "DET", "GSW",
+            "HOU", "IND", "LAC", "LAL", "MEM", "MIA", "MIL", "MIN", "NOP", "NYK",
+            "OKC", "ORL", "PHI", "PHX", "POR", "SAC", "SAS", "TOR", "UTA", "WAS"
+        ];
+
+        $(document).ready(function () {
+            teams.forEach(team => {
+                $('#team1, #team2').append(new Option(team, team));
+            });
+
+            $('#team-selection-form').submit(function (e) {
+                e.preventDefault();
+                const team1 = $('#team1').val();
+                const team2 = $('#team2').val();
+
+                if (team1 === team2) {
+                    alert("Please select two different teams.");
+                    return;
+                }
+
+                localStorage.setItem('team1', team1);
+                localStorage.setItem('team2', team2);
+
+                $('#team-selection').addClass('hidden');
+                $('#player-selection').removeClass('hidden');
+
+                $('#team1-header').text(`Select Players for ${team1}`);
+                $('#team2-header').text(`Select Players for ${team2}`);
+
+                populatePlayerList(team1, 'team1-players');
+                populatePlayerList(team2, 'team2-players');
+            });
+
+            function populatePlayerList(team, container) {
+                $.ajax({
+                    url: '/get_players',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ team_abbr: team }),
+                    success: function (players) {
+                        const playerList = players.map(player => `
+                            <div>
+                                <input type="checkbox" value="${player}" /> ${player}
+                            </div>
+                        `).join('');
+                        $(`#${container}`).html(playerList);
+                    },
+                    error: function () {
+                        alert('Error fetching players.');
+                    }
+                });
+            }
+
+            $('#predict-outcome').click(function () {
+                const team1Players = $('#team1-players input:checked').map(function () { return this.value; }).get();
+                const team2Players = $('#team2-players input:checked').map(function () { return this.value; }).get();
+                const team1 = localStorage.getItem('team1');
+                const team2 = localStorage.getItem('team2');
+
+                if (team1Players.length === 0 || team2Players.length === 0) {
+                    alert("Please select at least one player for each team.");
+                    return;
+                }
+
+                $.ajax({
+                    url: '/predict',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        team1_name: team1,
+                        team2_name: team2,
+                        team1_players: team1Players,
+                        team2_players: team2Players
+                    }),
+                    success: function (response) {
+                        $('#prediction-text').text(`Prediction: ${response.prediction}`);
+                        $('#prediction-result').show();
+                    },
+                    error: function (xhr) {
+                        const errorText = xhr.responseJSON?.error || 'An error occurred.';
+                        $('#prediction-text').text(errorText);
+                        $('#prediction-result').show();
+                    }
+                });
+            });
+
+            $('#back-button').click(function () {
+                $('#player-selection').addClass('hidden');
+                $('#team-selection').removeClass('hidden');
+                localStorage.removeItem('team1');
+                localStorage.removeItem('team2');
+            });
+        });
+    </script>
+</body>
+</html>
